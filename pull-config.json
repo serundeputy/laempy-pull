@@ -1,0 +1,12 @@
+{
+  "LP_DB_USER": "your db user",
+  "LP_DB_PWD": "your db password",
+  "LP_DB": "the name of the database",
+  "LP_PROJECT_ROOT": "/var/www/path/to/projectroot",
+  "LP_SITE_ROOT": "/var/www/path/to/site/root",
+  "LP_DB_BACK_PATH": "/home/user/path/to/a/backup/directory",
+  "LP_FILES_BACK_PATH": "/home/user/path/to/a/files/backup/directory",
+  "LP_HOST": "ip address of the server",
+  "LP_HOST_USER": "ssh user",
+  "LP_PRIVATE_KEY": "/path/to/your/local/private/key"
+}
