@@ -1,10 +1,10 @@
 'use strict';
 
+const Client = require('ssh2').Client;
+const conn = new Client();
 const { exec } = require("child_process");
 const fs = require('fs');
 const path = require('path');
-const node_ssh = require('node-ssh');
-const ssh = new node_ssh();
 
 module.exports = lando => ({
   command: 'lp',
@@ -22,20 +22,20 @@ module.exports = lando => ({
       }
     },
   },
-  run: options => {
+  run: async options => {
     const app = lando.getApp(options._app.root);
     const myLando = lando.config.command.$0;
     const rawData = fs.readFileSync('pull-config.json');
     const lpConfig = JSON.parse(rawData);
     const appPath = options._app.root;
-    const connect = ssh.connect({
+    const connect = {
       host: lpConfig.LP_HOST,
       username: lpConfig.LP_HOST_USER,
-      privateKey: lpConfig.LP_PRIVATE_KEY
-    });
-    //_runThePull(connect, lpConfig, myLando, appPath); 
-    _dump(connect, lpConfig).then(_getFile(connect, lpConfig));
-    
+      port: 22,
+      privateKey: fs.readFileSync(lpConfig.LP_PRIVATE_KEY)
+    };
+    _runThePull(connect, lpConfig, myLando, appPath);
+
     if (options.files) {
       console.log(options.files);
     }
@@ -51,12 +51,23 @@ module.exports = lando => ({
  * @param Ojbect lpConfig
  * The connecton configuration and paths.
  */
-function _dump(connect, lpConfig) {
-  connect.then(() => { 
-    ssh.exec(
-      `mysqldump -u ${lpConfig.LP_DB_USER} -p${lpConfig.LP_DB_PWD} ${lpConfig.LP_DB} > ${lpConfig.LP_DB_BACK_PATH}`
-    );
-  });
+async function _dump(connect, lpConfig) {
+  const mysqldump =
+    `mysqldump -u ${lpConfig.LP_DB_USER} -p${lpConfig.LP_DB_PWD} ${lpConfig.LP_DB} > ${lpConfig.LP_DB_BACK_PATH}`;
+  return await conn.on('ready', () => {
+    conn.exec(mysqldump, (err, stream) => {
+      if (err) throw err;
+      stream.on('close', (code, signal) => {
+        console.log('Stream :: close :: code: ' + code + ', signal: ' + signal);
+        conn.end();
+      }).on('data', (data) => {
+        console.log('STDOUT: ' + data);
+      }).stderr.on('data', (data) => {
+        console.log('STDERR: ' + data);
+      });
+    })
+  }).connect(connect);
+
 }
 
 /**
@@ -68,11 +79,10 @@ function _dump(connect, lpConfig) {
  * @param Ojbect lpConfig
  * The connecton configuration and paths.
  */
-function _getFile(connect, lpConfig) {
-  connect
-    .then(() => {
-      ssh.getFile('db.sql', lpConfig.LP_DB_BACK_PATH);
-    });
+function _getFile(lpConfig, appPath) {
+  const scp =
+    `scp ${lpConfig.LP_HOST_USER}@${lpConfig.LP_HOST}:${lpConfig.LP_DB_BACK_PATH} ${appPath}/db.sql`;
+  exec(scp, console.log('did it'));
 }
 
 /**
@@ -108,11 +118,9 @@ function _cleanRemote(connect, lpConfig) {
 /**
  *
  */
-function _runThePull(connect, lpConfig, myLando, appPath, tasks) {
-  if (tasks.length === 1) return tasks[0](input);
-  tasks[0](input, (output) => {
-    _runThePull(output, tasks.slice(1)); //Performs the tasks in the 'tasks[]' array
-  });
+async function _runThePull(connect, lpConfig, myLando, appPath) {
+  let dump = await _dump(connect, lpConfig);
+  let file = await _getFile(lpConfig, appPath);
 }
 
 /**
